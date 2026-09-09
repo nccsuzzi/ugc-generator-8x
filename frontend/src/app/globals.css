@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --surface-card: #fafaf8;
+  --primary-blue: #0021cc;
+  --primary-blue-hover: #001baa;
+  --text-primary: #0e121b;
+  --text-secondary: #525866;
+  --text-muted: #7c7c7c;
+  --border-subtle: #e1e4ea;
+  --border-divider: #eaeaea;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 8x Syne Display Typography */
+.font-display {
+  font-family: var(--font-syne), "Syne", sans-serif;
+  letter-spacing: -0.035em;
+}
+
+/* Subtle entrance animation (blur + scale + fade in) */
+@keyframes fadeInScaleBlur {
+  0% {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(20px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0px) scale(1);
+  }
+}
+
+.animate-entrance {
+  animation: fadeInScaleBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Soft light-mode skeleton shimmer */
+@keyframes shimmerLight {
+  0% {
+    transform: translateX(-100%) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(200%) skewX(-20deg);
+  }
+}
+
+.animate-shimmer-light {
+  animation: shimmerLight 2.5s infinite;
+}
+
+/* Custom subtle light scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e1e4ea;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #cdd2dc;
+}
