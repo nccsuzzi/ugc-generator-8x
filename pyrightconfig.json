@@ -1,0 +1,11 @@
+{
+  "include": [
+    "backend",
+    "api"
+  ],
+  "extraPaths": [
+    "backend"
+  ],
+  "venvPath": ".",
+  "venv": ".venv"
+}

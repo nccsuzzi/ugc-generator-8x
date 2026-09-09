@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, Integer, Float, Text, DateTime, LargeBinary, ForeignKey, JSON
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred
 from app.core.database import Base
 
 
@@ -28,8 +28,8 @@ class Video(Base):
     gif_position = Column(String, default="top", nullable=False)
     gif_scale = Column(Float, default=0.70, nullable=False)
     
-    # Store video bytes directly in PostgreSQL BYTEA
-    video_data = Column(LargeBinary, nullable=True)
+    # Store video bytes directly in PostgreSQL BYTEA (deferred so status queries are fast)
+    video_data = deferred(Column(LargeBinary, nullable=True))
     content_type = Column(String, default="video/mp4", nullable=False)
     
     # Licensing Gate & Provenance Metadata

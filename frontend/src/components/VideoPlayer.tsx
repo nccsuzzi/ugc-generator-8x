@@ -14,11 +14,22 @@ export default function VideoPlayer({ metadata }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState('0:00');
 
   const fileUrl = getVideoFileUrl(metadata.id);
+
+  const handleRetry = () => {
+    setHasError(false);
+    setIsLoaded(false);
+    const video = videoRef.current;
+    if (video) {
+      video.load();
+      video.play().catch(() => {});
+    }
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -39,6 +50,7 @@ export default function VideoPlayer({ metadata }: VideoPlayerProps) {
         });
     }
   }, [fileUrl]);
+
 
   const togglePlay = () => {
     const video = videoRef.current;
@@ -156,10 +168,26 @@ export default function VideoPlayer({ metadata }: VideoPlayerProps) {
           loop
           preload="auto"
           muted={isMuted}
-          onLoadedMetadata={() => setIsLoaded(true)}
-          onLoadedData={() => setIsLoaded(true)}
-          onCanPlay={() => setIsLoaded(true)}
-          onPlaying={() => setIsLoaded(true)}
+          onLoadedMetadata={() => {
+            setIsLoaded(true);
+            setHasError(false);
+          }}
+          onLoadedData={() => {
+            setIsLoaded(true);
+            setHasError(false);
+          }}
+          onCanPlay={() => {
+            setIsLoaded(true);
+            setHasError(false);
+          }}
+          onPlaying={() => {
+            setIsLoaded(true);
+            setHasError(false);
+          }}
+          onError={() => {
+            setHasError(true);
+            setIsLoaded(false);
+          }}
           onTimeUpdate={handleTimeUpdate}
           onEnded={() => setIsPlaying(false)}
           className={`w-full h-full object-cover cursor-pointer transition-opacity duration-300 ${
@@ -168,8 +196,28 @@ export default function VideoPlayer({ metadata }: VideoPlayerProps) {
           onClick={togglePlay}
         />
 
+        {/* Error State if video failed to stream or load */}
+        {hasError && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center px-4 bg-[#0e121b] text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20 flex items-center justify-center mb-3 shadow-sm">
+              <RefreshCw className="w-5 h-5" />
+            </div>
+            <div className="text-sm font-semibold text-white mb-1">Stream stalled</div>
+            <div className="text-xs text-white/60 mb-4 max-w-[200px]">
+              Could not load video stream. Click retry to reconnect.
+            </div>
+            <button
+              onClick={handleRetry}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#0021cc] hover:bg-[#001baa] text-white text-xs font-semibold shadow-md transition active:scale-95 cursor-pointer pointer-events-auto"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Playback</span>
+            </button>
+          </div>
+        )}
+
         {/* Shimmer Skeleton Placeholder while video is buffering / decoding */}
-        {!isLoaded && (
+        {!isLoaded && !hasError && (
           <div className="absolute inset-0 z-10 flex flex-col justify-between px-3.5 pt-[44px] pb-5 bg-[#fafaf8] pointer-events-none">
             <div
               className="absolute -inset-[100%] bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shimmer-light"
@@ -196,6 +244,7 @@ export default function VideoPlayer({ metadata }: VideoPlayerProps) {
             </div>
           </div>
         )}
+
 
         {/* Top Badges: Positioned at safe-area top inset top-[44px] cleanly below Dynamic Island */}
         {isLoaded && (

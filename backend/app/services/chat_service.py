@@ -65,14 +65,30 @@ class ChatService:
             db.add(assistant_msg)
             db.commit()
 
-            # Dispatch background video rendering pipeline
-            asyncio.create_task(
-                video_service.generate_video_pipeline(
+            # In Vercel serverless / AWS Lambda, unawaited background tasks freeze upon response completion.
+            # Await the pipeline so the render completes within this single function invocation.
+            import os
+            is_serverless = bool(
+                os.environ.get("VERCEL")
+                or os.environ.get("VERCEL_ENV")
+                or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+                or os.environ.get("SERVERLESS")
+            )
+            if is_serverless:
+                logger.info(f"Serverless environment detected (VERCEL={os.environ.get('VERCEL')}). Running video pipeline synchronously in this invocation...")
+                await video_service.generate_video_pipeline(
                     video_id=video.id,
                     url=detected_url,
                     user_hint=message_text,
                 )
-            )
+            else:
+                asyncio.create_task(
+                    video_service.generate_video_pipeline(
+                        video_id=video.id,
+                        url=detected_url,
+                        user_hint=message_text,
+                    )
+                )
 
             return ChatResponse(
                 message=assistant_reply,

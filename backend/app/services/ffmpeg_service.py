@@ -24,8 +24,35 @@ class FFmpegService:
     """
 
     def __init__(self):
-        self.ffmpeg_bin = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
-        self.ffprobe_bin = shutil.which("ffprobe") or "/opt/homebrew/bin/ffprobe"
+        self.ffmpeg_bin = self._resolve_binary("ffmpeg")
+        self.ffprobe_bin = self._resolve_binary("ffprobe")
+
+    def _resolve_binary(self, name: str) -> str:
+        """
+        Resolves executable binary:
+        1. On Linux (Vercel Serverless runtime): uses bundled static binary in backend/bin/<name>
+        2. On macOS (local dev): prefers system/Homebrew binary so host architecture runs natively
+        """
+        import platform
+        bundled = settings.BASE_DIR / "bin" / name
+        if bundled.exists():
+            if not os.access(bundled, os.X_OK):
+                try:
+                    bundled.chmod(bundled.stat().st_mode | 0o755)
+                except Exception:
+                    pass
+            if platform.system().lower() == "linux":
+                return str(bundled)
+            # macOS local development
+            system_bin = shutil.which(name)
+            if system_bin:
+                return system_bin
+            mac_brew = f"/opt/homebrew/bin/{name}"
+            if os.path.exists(mac_brew):
+                return mac_brew
+            return str(bundled)
+
+        return shutil.which(name) or f"/opt/homebrew/bin/{name}"
 
     def render_video(
         self,
@@ -367,6 +394,8 @@ class FFmpegService:
 
     def _load_bold_font(self, size: int = 56) -> ImageFont.FreeTypeFont:
         font_candidates = [
+            str(settings.ASSETS_DIR / "fonts" / "DejaVuSans-Bold.ttf"),
+            str(settings.ASSETS_DIR / "fonts" / "Arial-Bold.ttf"),
             "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
             "/Library/Fonts/Arial Bold.ttf",
             "/System/Library/Fonts/Supplemental/Arial.ttf",

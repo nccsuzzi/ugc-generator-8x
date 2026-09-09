@@ -1,6 +1,6 @@
 import { VideoMetadata, ConversationHistoryResponse } from '../types/chat';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export interface SendMessageResponse {
   message: string;

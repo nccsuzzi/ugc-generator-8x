@@ -1,6 +1,7 @@
 import re
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.video import Video
@@ -151,9 +152,9 @@ def get_video_file(
     db: Session = Depends(get_db),
 ):
     """
-    Streams or downloads the raw MP4 video directly from PostgreSQL BYTEA storage.
+    Streams or downloads the raw MP4 video directly from local cache or PostgreSQL BYTEA.
     - If `download=true` or path is `/download`: serves with `Content-Disposition: attachment; filename="..."`
-    - Otherwise: supports HTTP Range requests (206 Partial Content) for browser seeking and playback.
+    - Otherwise: supports HTTP Range requests (206 Partial Content) for browser seeking and instant playback.
     - Rejects with HTTP 410 Gone if past the 24-hour retention window.
     """
     video = db.query(Video).filter(Video.id == video_id).first()
@@ -167,50 +168,24 @@ def get_video_file(
         )
 
     storage = PostgresVideoStorage(db)
-    video_bytes = storage.get(video_id)
-    if not video_bytes:
+    file_path = storage.get_file_path(video_id)
+    if not file_path or not file_path.exists():
         raise HTTPException(status_code=404, detail="Video file data not found or still rendering.")
 
-    file_size = len(video_bytes)
-    is_download = download or request.url.path.endswith("/download")
     safe_filename = generate_download_filename(video)
-
-    # If requested as direct download, force attachment header
-    if is_download:
-        headers = {
-            "Content-Disposition": f'attachment; filename="{safe_filename}"',
-            "Content-Length": str(file_size),
-            "Content-Type": "video/mp4",
-            "Cache-Control": "public, max-age=86400",
-        }
-        return Response(content=video_bytes, status_code=status.HTTP_200_OK, headers=headers)
-
-    # Standard browser playback with HTTP Range support
-    range_header = request.headers.get("Range")
-    if range_header:
-        match = re.match(r"bytes=(\d+)-(\d*)", range_header)
-        if match:
-            start = int(match.group(1))
-            end = int(match.group(2)) if match.group(2) else file_size - 1
-            if start >= file_size:
-                raise HTTPException(status_code=416, detail="Requested range not satisfiable")
-            end = min(end, file_size - 1)
-            chunk_size = end - start + 1
-            chunk = video_bytes[start : end + 1]
-
-            headers = {
-                "Content-Range": f"bytes {start}-{end}/{file_size}",
-                "Accept-Ranges": "bytes",
-                "Content-Length": str(chunk_size),
-                "Content-Type": "video/mp4",
-                "Cache-Control": "public, max-age=3600",
-            }
-            return Response(content=chunk, status_code=status.HTTP_206_PARTIAL_CONTENT, headers=headers)
+    is_download = download or request.url.path.endswith("/download")
 
     headers = {
+        "Cache-Control": "public, max-age=86400",
         "Accept-Ranges": "bytes",
-        "Content-Length": str(file_size),
-        "Content-Type": "video/mp4",
-        "Cache-Control": "public, max-age=3600",
     }
-    return Response(content=video_bytes, status_code=status.HTTP_200_OK, headers=headers)
+    if is_download:
+        headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+
+    return FileResponse(
+        path=file_path,
+        media_type="video/mp4",
+        filename=safe_filename if is_download else None,
+        headers=headers,
+    )
+

@@ -1,15 +1,33 @@
+import os
 from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
-# Engine configuration with connection pooling
-engine = create_engine(
-    settings.sync_database_url,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+# Engine configuration: use NullPool for serverless / Neon connection pooler
+# NullPool ensures short-lived connections and prevents exhausting connection limits across ephemeral serverless containers
+is_serverless = bool(
+    os.environ.get("VERCEL")
+    or os.environ.get("VERCEL_ENV")
+    or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+    or "pooler" in settings.sync_database_url
 )
+
+if is_serverless:
+    engine = create_engine(
+        settings.sync_database_url,
+        poolclass=NullPool,
+        pool_pre_ping=True,
+    )
+else:
+    engine = create_engine(
+        settings.sync_database_url,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=10,
+    )
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

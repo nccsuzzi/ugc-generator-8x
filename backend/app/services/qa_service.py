@@ -29,8 +29,8 @@ class QAService:
     """
 
     def __init__(self):
-        self.ffprobe_bin = shutil.which("ffprobe") or "/opt/homebrew/bin/ffprobe"
-        self.ffmpeg_bin = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
+        self.ffprobe_bin = self._resolve_binary("ffprobe")
+        self.ffmpeg_bin = self._resolve_binary("ffmpeg")
         self.face_cascade = None
         if cv2 is not None:
             try:
@@ -39,6 +39,88 @@ class QAService:
                     self.face_cascade = cv2.CascadeClassifier(cascade_path)
             except Exception as e:
                 logger.warning(f"Failed to load OpenCV face cascade: {e}")
+
+    def _resolve_binary(self, name: str) -> Optional[str]:
+        import platform
+        bundled = settings.BASE_DIR / "bin" / name
+        if bundled.exists():
+            if not os.access(bundled, os.X_OK):
+                try:
+                    bundled.chmod(bundled.stat().st_mode | 0o755)
+                except Exception:
+                    pass
+            if platform.system().lower() == "linux":
+                return str(bundled)
+            system_bin = shutil.which(name)
+            if system_bin:
+                return system_bin
+            mac_brew = f"/opt/homebrew/bin/{name}"
+            if os.path.exists(mac_brew):
+                return mac_brew
+            return str(bundled)
+
+        system_bin = shutil.which(name)
+        if system_bin:
+            return system_bin
+        mac_brew = f"/opt/homebrew/bin/{name}"
+        if os.path.exists(mac_brew):
+            return mac_brew
+        return None
+
+    def _inspect_streams(self, video_path: Path) -> tuple[list[dict], dict]:
+        """Inspects streams and container format using ffprobe if present, or ffmpeg fallback."""
+        import re
+        if self.ffprobe_bin and (os.path.exists(self.ffprobe_bin) or shutil.which(self.ffprobe_bin)):
+            try:
+                probe_cmd = [
+                    self.ffprobe_bin,
+                    "-v", "error",
+                    "-show_entries", "stream=index,codec_type,codec_name,width,height,sample_rate,channels,r_frame_rate,avg_frame_rate",
+                    "-show_entries", "format=duration,size,bit_rate",
+                    "-of", "json",
+                    str(video_path),
+                ]
+                res = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+                probe_data = json.loads(res.stdout)
+                return probe_data.get("streams", []), probe_data.get("format", {})
+            except Exception as e:
+                logger.warning(f"ffprobe inspection failed ({e}), falling back to ffmpeg probe...")
+
+        # Fallback inspection via ffmpeg -i
+        res = subprocess.run([self.ffmpeg_bin, "-hide_banner", "-i", str(video_path)], stderr=subprocess.PIPE, text=True)
+        out = res.stderr
+
+        dur_m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", out)
+        duration = float(dur_m.group(1))*3600 + float(dur_m.group(2))*60 + float(dur_m.group(3)) if dur_m else 0.0
+
+        streams = []
+        v_m = re.search(r"Stream #\d+:\d+.*?: Video: ([^ ,]+).*? (\d{3,4})x(\d{3,4})", out)
+        if v_m:
+            fps_m = re.search(r"(\d+(?:\.\d+)?)\s*(?:fps|tbr)", out)
+            fps = fps_m.group(1) if fps_m else "30"
+            streams.append({
+                "codec_type": "video",
+                "codec_name": v_m.group(1),
+                "width": int(v_m.group(2)),
+                "height": int(v_m.group(3)),
+                "r_frame_rate": f"{int(float(fps))}/1" if fps else "30/1",
+                "avg_frame_rate": f"{fps}",
+            })
+
+        a_m = re.search(r"Stream #\d+:\d+.*?: Audio: ([^ ,]+).*? (\d+) Hz,\s*(stereo|mono|\d+ channels)", out)
+        if a_m:
+            ch_str = a_m.group(3)
+            channels = 2 if "stereo" in ch_str else (1 if "mono" in ch_str else 2)
+            streams.append({
+                "codec_type": "audio",
+                "codec_name": a_m.group(1),
+                "sample_rate": a_m.group(2),
+                "channels": channels,
+            })
+
+        file_size = video_path.stat().st_size if video_path.exists() else 0
+        fmt = {"duration": str(duration), "size": str(file_size)}
+        return streams, fmt
 
     def validate_video(
         self,
@@ -53,23 +135,8 @@ class QAService:
         if not video_path.exists():
             raise FileNotFoundError(f"Video file not found for QA: {video_path}")
 
-        # 1. FFprobe Stream and Container Inspection
-        probe_cmd = [
-            self.ffprobe_bin,
-            "-v", "error",
-            "-show_entries", "stream=index,codec_type,codec_name,width,height,sample_rate,channels,r_frame_rate,avg_frame_rate",
-            "-show_entries", "format=duration,size,bit_rate",
-            "-of", "json",
-            str(video_path),
-        ]
-        try:
-            res = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-            probe_data = json.loads(res.stdout)
-        except Exception as e:
-            raise RuntimeError(f"FFprobe inspection command failed: {e}")
-
-        streams = probe_data.get("streams", [])
-        fmt = probe_data.get("format", {})
+        # 1. Stream and Container Inspection (via ffprobe or ffmpeg fallback)
+        streams, fmt = self._inspect_streams(video_path)
 
         video_streams = [s for s in streams if s.get("codec_type") == "video"]
         audio_streams = [s for s in streams if s.get("codec_type") == "audio"]

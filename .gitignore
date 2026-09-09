@@ -24,4 +24,4 @@ CAPTURE-TEST.md
 backend/temp/
 
 # Antigravity agent logs MUST be tracked and committed
-!.agent-logs/
+.agent-logs/
