@@ -6,10 +6,12 @@
 FROM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
 
-COPY frontend/package.json frontend/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY frontend/ ./
+COPY src/ ./src/
+COPY public/ ./public/
+COPY next.config.ts tsconfig.json postcss.config.mjs eslint.config.mjs next-env.d.ts ./
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
@@ -38,7 +40,7 @@ COPY backend/requirements.txt /app/backend/
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 # Install frontend production dependencies only
-COPY frontend/package.json frontend/package-lock.json /app/frontend/
+COPY package.json package-lock.json /app/frontend/
 RUN cd /app/frontend && npm ci --omit=dev && npm cache clean --force
 
 # Copy Next.js production build artifacts from builder stage

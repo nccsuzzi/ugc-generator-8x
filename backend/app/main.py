@@ -34,11 +34,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount API routes
-app.include_router(health_router, prefix=settings.API_V1_STR, tags=["Health"])
-app.include_router(chat_router, prefix=settings.API_V1_STR, tags=["Chat"])
-app.include_router(videos_router, prefix=settings.API_V1_STR, tags=["Videos"])
-app.include_router(products_router, prefix=settings.API_V1_STR, tags=["Products"])
+# Mount API routes (support both /api/v1 and /v1 prefixes for Vercel Serverless compatibility)
+for prefix in [settings.API_V1_STR, "/v1"]:
+    app.include_router(health_router, prefix=prefix, tags=["Health"])
+    app.include_router(chat_router, prefix=prefix, tags=["Chat"])
+    app.include_router(videos_router, prefix=prefix, tags=["Videos"])
+    app.include_router(products_router, prefix=prefix, tags=["Products"])
 
 
 @app.get("/")

@@ -2,7 +2,7 @@ import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.video import Video
@@ -67,7 +67,7 @@ class PostgresVideoStorage(VideoStorage):
             if not video:
                 raise ValueError(f"Video record with id {video_id} not found.")
             video.video_data = video_bytes
-            video.content_type = "video/mp4"
+            video.content_type = "video/mp4"  # type: ignore[assignment]
             db.commit()
         finally:
             if should_close:
@@ -84,7 +84,7 @@ class PostgresVideoStorage(VideoStorage):
         try:
             video = db.query(Video).filter(Video.id == video_id).first()
             if video and video.video_data:
-                data = bytes(video.video_data)
+                data = bytes(cast(bytes, video.video_data))
                 try:
                     cache_path.write_bytes(data)
                 except Exception:
